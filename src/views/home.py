@@ -21,5 +21,6 @@ def load_view():
         - Expliquer l'objectif, les ambitions du projet et la raison pour laquelle vous le menez.
         - Eventuellement vous présenter brièvement.
         - Ce que vous jugerez bon de documenter pour introduire le projet.
+        - C'est le debut du projet fil rouge
         """
     )
