@@ -43,7 +43,7 @@ Exécutez les commandes suivantes, dans l'ordre :
 
 - Pour lancer votre application Streamlit :
     ```
-    streamlit run main.py
+    python3 -m streamlit run main.py
     ```
 
 ## Documentation
