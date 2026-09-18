@@ -27,11 +27,11 @@ def navigation():
         home.load_view()
     elif route == "/goal":
         dataset.load_view()
-    elif route == "/dataset":
+    elif route == "/Champion":
         dataset.load_view()
-    elif route == "/analysis":
+    elif route == "/Match pro":
         analysis.load_view()
-    elif route == "/conclusion":
+    elif route == "/Item":
         conclusion.load_view()
     elif route == "/logout":
         logout.load_view()

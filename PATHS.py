@@ -1,8 +1,8 @@
 NAVBAR_PATHS = {
     'ACCUEIL':'home',
-    'JEU DE DONNEES': 'dataset',
-    'ANALYSE': 'analysis',
-    'CONCLUSION': 'conclusion',
+    'CHAMPION': 'Champion',
+    'MATCH PRO': 'Match pro',
+    'ITEM': 'Item',
 }
 
 SETTINGS = {
