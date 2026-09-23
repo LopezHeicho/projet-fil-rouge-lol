@@ -80,3 +80,6 @@ def navbar_component():
     </script>
     '''
     html(js)
+
+def patch_to_tuple(p):
+    return tuple(int(x) for x in p.split("."))
