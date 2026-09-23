@@ -1,8 +1,9 @@
 NAVBAR_PATHS = {
-    'ACCUEIL':'home',
-    'CHAMPION': 'Champion',
-    'MATCH PRO': 'Match pro',
-    'ITEM': 'Item',
+    "ACCEUIL" : "home",
+    "JOUEUR" : "joueur",
+    "DRAFT" : "draft",
+    "ESPORT" : "esport",
+    "META" : "meta"
 }
 
 SETTINGS = {
