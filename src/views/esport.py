@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
-from src.models.esports import (
+from models.esport import (
     annees_disponibles,
     charger_donnees_esport,
     stats_joueur,

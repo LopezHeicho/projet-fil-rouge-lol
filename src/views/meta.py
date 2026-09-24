@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
-from src.models.items import evolution_item, evolution_efficiency_item, changement_item_patch, comparaison_item, charger_donnees_items
-from src.models.champions import stat_niveau, comparaison_stats_champion, evolution_champion, difficulty_champion_type, changement_champion_patch, charger_donnees_champions
-from src.models.spells import charger_donnees_spells, changement_spell_patch
+from models.item import evolution_item, evolution_efficiency_item, changement_item_patch, comparaison_item, charger_donnees_items, stats_disponibles_item
+from models.champion import stat_niveau, comparaison_stats_champion, evolution_champion, difficulty_champion_type, changement_champion_patch, charger_donnees_champions
+from models.spell import charger_donnees_spells, changement_spell_patch
 from utils import patch_to_tuple
 
 def choisir_item(df, key_prefix, label="Item", patch=None, default=None):
@@ -113,18 +113,14 @@ def load_view():
             
             nom_evo, id_evo = choisir_item(df_items, key_prefix="evo", default="Doran's Blade")
             
-            colonnes_a_exclure_stats = [
-                "item_id", "name", "patch", "plaintext", "tags", "description", "colloq",
-                "gold_base", "gold_sell", "purchasable", "depth", "from", "into", "maps",
-                "image_full", "required_champion", "required_ally", "special_recipe",
-                "in_store", "hide_from_all", "consumed", "consume_on_full", "stacks"
-            ]
-            stats_disponibles = [c for c in df_items.columns if c not in colonnes_a_exclure_stats]
-            
+            stats_disponibles = stats_disponibles_item(df_items, item=nom_evo, item_id=id_evo)
+            if st.session_state.get("evo_stat") not in stats_disponibles:
+                st.session_state.pop("evo_stat", None)
+            index_defaut_stat = stats_disponibles.index("Cout d'achat") if "Cout d'achat" in stats_disponibles else 0
             stat_choice = st.selectbox(
                 "Statistique à tracer",
                 options=stats_disponibles,
-                index=stats_disponibles.index("Cout d'achat"),
+                index=index_defaut_stat,
                 key="evo_stat",
             )
             

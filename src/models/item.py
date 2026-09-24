@@ -280,6 +280,29 @@ def resoudre_item_id(df, item=None, item_id=None):
 
     return ids_possibles[0], None, None
 
+def stats_disponibles_item(df, item=None, item_id=None):
+    """Retourne la liste des stats réellement disponibles (non nulles) pour cet item."""
+    id_, message_erreur, df_ambiguite = resoudre_item_id(df, item, item_id)
+    if id_ is None:
+        return []
+
+    df_item = df[df["item_id"] == id_]
+
+    colonnes_a_exclure = [
+        "item_id", "name", "patch", "plaintext", "tags", "description", "colloq",
+        "gold_base", "gold_sell", "purchasable", "depth", "from", "into", "maps",
+        "image_full", "required_champion", "required_ally", "special_recipe",
+        "in_store", "hide_from_all", "consumed", "consume_on_full", "stacks",
+        "efficiency_gold"
+    ]
+
+    df_stats = df_item.drop(columns=[c for c in colonnes_a_exclure if c in df_item.columns])
+    colonnes_non_nulles = (df_stats == 0).all()
+    df_stats = df_stats.loc[:, ~colonnes_non_nulles]
+
+    return df_stats.columns.tolist()
+
+
 def evolution_item(df, item=None, item_id=None, stat=None, seuil_trou=5):
     """Retourne (message_erreur, df_ambiguite, avertissements, nom_affiche, df_item, df_stats, stats_valides)."""
     id_, message_erreur, df_ambiguite = resoudre_item_id(df, item, item_id)
