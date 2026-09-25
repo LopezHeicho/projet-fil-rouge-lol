@@ -5,6 +5,7 @@ from models.item import charger_donnees_items
 from controllers.joueur import (
     get_recherche,
     get_stats_joueur,
+    get_nombre_games,
     get_historique,
     get_stat_role,
     get_bilan_side,
@@ -108,7 +109,7 @@ def load_view():
         with col3:
             region = st.selectbox("Région", options=["europe", "americas", "asia", "sea"], key="recherche_region")
         with col4:
-            nb_games = st.selectbox("Nombre de games", min_value=10, max_value=100, value=50, key="recherche_count")
+            nb_games = st.slider("Nombre de games", min_value=10, max_value=100, value=50, key="recherche_count")
  
         if st.button("Rechercher", type="primary", key="recherche_bouton"):
             if not pseudo or not tag:
@@ -124,6 +125,10 @@ def load_view():
                         f"{resultat['nb_matchs_recuperes']} game(s) récupérée(s) "
                         f"({resultat['nb_lignes_nouvelles']} nouvelle(s) ligne(s) ajoutée(s) au dataset)."
                     )
+                    if resultat["rang_affiche"]:
+                        st.metric("Rang actuel :", resultat["rang_affiche"])
+                    else:
+                        st.caption("Rang non disponible (compte non classé sur cette file, ou non résolu).")
  
         pseudo_actif = st.session_state.get("joueur_pseudo_actif")
         if pseudo_actif:
@@ -181,7 +186,8 @@ def load_view():
             with col3:
                 joueur = _selectbox_joueur(df, key="hist_joueur", defaut=pseudo_actif)
             with col4:
-                nombre = st.slider("Nombre de games", min_value=5, max_value=50, value=10, key="hist_nombre")
+                game_dispo = get_nombre_games(df, joueur, season=saison, queue_id=queue)
+                nombre = st.slider("Nombre de games", min_value=5, max_value=game_dispo, value=10, key="hist_nombre")
  
             st.dataframe(get_historique(df, joueur, nombre_game=nombre, season=saison, queue_id=queue), use_container_width=True, hide_index=True)
  

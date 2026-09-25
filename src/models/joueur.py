@@ -377,3 +377,10 @@ def habitudes_jeu_joueur(df, player, season="16", queue_id=420):
     par_jour = par_jour.sort_values("Jour de la semaine")
  
     return par_moment, par_jour
+
+def nombre_game_dispo(df, player, season="16", queue_id=420):
+    df_season = df[df["patch_major_minor"].str.startswith(season)]
+    df_queue = df_season[df_season["queueId"] == queue_id] if queue_id else df_season
+    df_player = df_queue[df_queue["riotIdGameName"] == player]
+
+    return len(df_player)

@@ -14,6 +14,7 @@ from models.joueur import (
     recap_multikills_joueur,
     profil_objectifs_joueur,
     habitudes_jeu_joueur,
+    nombre_game_dispo,
 )
 from models.joueur_live import rechercher_et_recuperer, charger_dataset_complet, RechercheJoueurError
  
@@ -94,6 +95,9 @@ def get_stats_joueur(df, player_name_1, player_name_2=None, position=None, seaso
     labels, values_1, values_2, nom_2 = calc_stats_joueur(df, player_name_1, player_name_2, position, season, queue_id)
     fig = figure_stats_joueur(labels, values_1, values_2, player_name_1, nom_2, season)
     return {"fig": fig}
+
+def get_nombre_games(df, player, season="16", queue_id=420):
+    return nombre_game_dispo(df, player, season=season, queue_id=queue_id)
  
  
 def get_historique(df, player, nombre_game=5, season="16", queue_id=420):
