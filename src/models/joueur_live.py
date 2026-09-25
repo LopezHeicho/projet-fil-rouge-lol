@@ -26,7 +26,7 @@ except ImportError as exc:
  
 DB_PATH = "data/users.db"
 TABLE_NAME = "player_live_matches"
-STATIC_CSV_PATH = r"C:\Users\lopez\Desktop\Projet Fil Rouge\fetch_player_matches\data\player_matches.csv"
+STATIC_CSV_PATH = "data/player_matches.csv"
 CACHE_MATCHES = Path("cache/matches")
 CACHE_RUNES = Path("cache/ddragon_runes")
 CACHE_RANKS = Path("cache/league_ranks")

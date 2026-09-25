@@ -5,7 +5,7 @@ from utils import patch_to_tuple
 
 @st.cache_data
 def charger_donnees_champions():
-    df = pd.read_csv(r"C:\Users\lopez\Desktop\Projet Fil Rouge\lol_meta_dataset\data\champions_by_patch.csv")
+    df = pd.read_csv("data/champions_by_patch.csv")
 
     df = df.drop(index=df[df["patch"].str.startswith("0.")].index)
 

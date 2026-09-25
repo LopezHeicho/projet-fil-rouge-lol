@@ -126,7 +126,7 @@ def stat_deja_presente(row, nom_stat, mapping):
 @st.cache_data
 def charger_donnees_items():
     df = pd.read_csv(
-        r"C:\Users\lopez\Desktop\Projet Fil Rouge\lol_meta_dataset\data\items_by_patch.csv",
+        "data/items_by_patch.csv",
         dtype={"item_id": str, "maps": str, "required_ally": str}
     )
 

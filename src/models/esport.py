@@ -7,7 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
  
-DOSSIER_ESPORT = r"C:\Users\lopez\Desktop\Projet Fil Rouge\clean_oe_matches\data\pro_matches_by_year"
+DOSSIER_ESPORT = "data/pro_matches_by_year"
  
  
 # ---------------------------------------------------------------------------
