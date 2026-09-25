@@ -16,19 +16,19 @@ def navbar_component():
 
     navbar_items = ''
     for key, value in NAVBAR_PATHS.items():
-        navbar_items += (f'<li><a class="navitem" href="/?nav=%2F{value}"><span class="nav-label">{key}</span></a></li>')
+        navbar_items += (f'<li><a class="navitem" target="_self" href="/?nav=%2F{value}"><span class="nav-label">{key}</span></a></li>')
 
     settings_items = ''
     for key, value in SETTINGS.items():
         settings_items += (
-            f'<a href="/?nav={value}" class="settingsNav">{key}</a>')
+            f'<a href="/?nav={value}" target="_self" class="settingsNav">{key}</a>')
 
     component = rf'''
             <div class="navbar-wrap">
                 <nav class="navbar" id="navbar">
                     <div class="nav-container">
                         <div class="brand">
-                            <a href="/?nav=%2Fhome" class="brand-link">🚀 DataRockstars</a>
+                            <a href="/?nav=%2Fhome" target="_self" class="brand-link">🚀 DataRockstars</a>
                         </div>
                         <ul class="navlist">
                             {navbar_items}
@@ -44,19 +44,16 @@ def navbar_component():
             </div>
             '''
     st.markdown(component, unsafe_allow_html=True)
+
+    # Reste uniquement le toggle du menu déroulant (Paramètres) : le hack
+    # JS qui retirait l'attribut target="_blank" des liens n'est plus
+    # nécessaire puisqu'on met désormais target="_self" directement dans
+    # le HTML ci-dessus (fiable depuis Streamlit >= 1.8.1, contrairement au
+    # bricolage precedent qui allait modifier le DOM parent depuis l'iframe
+    # du composant, fragile et probablement la cause du bug "ouvre un
+    # nouvel onglet").
     js = '''
     <script>
-        // navbar elements
-        var navigationTabs = window.parent.document.getElementsByClassName("navitem");
-        var cleanNavbar = function(navigation_element) {
-            navigation_element.removeAttribute('target')
-        }
-        
-        for (var i = 0; i < navigationTabs.length; i++) {
-            cleanNavbar(navigationTabs[i]);
-        }
-        
-        // Dropdown hide / show
         var dropdown = window.parent.document.getElementById("settingsDropDown");
         dropdown.onclick = function() {
             var dropWindow = window.parent.document.getElementById("myDropdown");
@@ -68,18 +65,10 @@ def navbar_component():
                 dropWindow.style.pointerEvents = "auto";
             }
         };
-        
-        var settingsNavs = window.parent.document.getElementsByClassName("settingsNav");
-        var cleanSettings = function(navigation_element) {
-            navigation_element.removeAttribute('target')
-        }
-        
-        for (var i = 0; i < settingsNavs.length; i++) {
-            cleanSettings(settingsNavs[i]);
-        }
     </script>
     '''
     html(js)
+
 
 def patch_to_tuple(p):
     return tuple(int(x) for x in p.split("."))
