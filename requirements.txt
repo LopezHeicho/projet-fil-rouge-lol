@@ -6,3 +6,5 @@ seaborn
 streamlit
 certifi
 requests
+plotly
+scikit-learn

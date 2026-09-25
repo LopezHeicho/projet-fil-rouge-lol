@@ -1,0 +1,12 @@
+.DS_Store
+**/__pycache__
+data/users.db*
+.streamlit/secrets.toml
+cache/
+.git
+.github/
+notebooks/
+tests/
+docs/
+.venv
+venv
