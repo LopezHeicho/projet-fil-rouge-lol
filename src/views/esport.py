@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
  
 from models.esport import annees_disponibles, charger_donnees_esport
-from controllers.esports import (
+from controllers.esport import (
     get_comparaison_joueurs,
     get_winrate_champion,
     get_winrate_team,
