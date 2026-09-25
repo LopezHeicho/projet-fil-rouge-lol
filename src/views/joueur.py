@@ -100,20 +100,22 @@ def load_view():
         st.subheader("Rechercher un joueur")
         st.caption("Entre ton Riot ID (Pseudo#TAG) pour récupérer tes dernières games et ton rang actuel.")
  
-        col1, col2, col3 = st.columns([2, 1, 1])
+        col1, col2, col3, col4 = st.columns([2, 1, 1, 1])
         with col1:
             pseudo = st.text_input("Pseudo", key="recherche_pseudo")
         with col2:
             tag = st.text_input("TAG (sans le #)", key="recherche_tag")
         with col3:
             region = st.selectbox("Région", options=["europe", "americas", "asia", "sea"], key="recherche_region")
+        with col4:
+            nb_games = st.selectbox("Nombre de games", min_value=10, max_value=100, value=50, key="recherche_count")
  
         if st.button("Rechercher", type="primary", key="recherche_bouton"):
             if not pseudo or not tag:
                 st.warning("Renseigne un pseudo ET un tag.")
             else:
                 with st.spinner("Récupération de tes dernières games auprès de l'API Riot..."):
-                    resultat = get_recherche(pseudo, tag, region=region)
+                    resultat = get_recherche(pseudo, tag, region=region, count=nb_games)
                 if resultat["erreur"]:
                     st.error(resultat["erreur"])
                 else:
