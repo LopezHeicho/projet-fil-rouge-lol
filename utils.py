@@ -14,6 +14,9 @@ def navbar_component():
     with open("src/assets/images/settings.png", "rb") as image_file:
         image_as_base64 = base64.b64encode(image_file.read())
 
+    with open("src/assets/images/logo_hexforge_navbar.svg") as svg_file:
+        logo_svg = " ".join(svg_file.read().split())
+
     navbar_items = ''
     for key, value in NAVBAR_PATHS.items():
         navbar_items += (f'<li><a class="navitem" target="_self" href="/?nav=%2F{value}"><span class="nav-label">{key}</span></a></li>')
@@ -28,7 +31,9 @@ def navbar_component():
                 <nav class="navbar" id="navbar">
                     <div class="nav-container">
                         <div class="brand">
-                            <a href="/?nav=%2Fhome" target="_self" class="brand-link">🚀 DataRockstars</a>
+                            <a href="/?nav=%2Fhome" target="_self" class="brand-link">
+                                {logo_svg}
+                            </a>
                         </div>
                         <ul class="navlist">
                             {navbar_items}
@@ -69,6 +74,38 @@ def navbar_component():
     '''
     html(js)
 
+def sidebar_logo():
+    with open("src/assets/images/logo_hexforge_sidebar.svg") as svg_file:
+        logo_svg = " ".join(svg_file.read().split())
+
+    st.sidebar.markdown(
+        f'''
+        <div class="sidebar-logo-wrap">
+            {logo_svg}
+        </div>
+        ''',
+        unsafe_allow_html=True,
+    )
+
+
+def footer_disclaimer():
+    st.markdown("---")
+    st.caption(
+        "Ce projet est un exercice de formation à but non commercial, non affilié à "
+        "Riot Games. *Riot Games does not endorse or sponsor this project.*"
+    )
+
 
 def patch_to_tuple(p):
     return tuple(int(x) for x in p.split("."))
+
+def valeurs_numeriques(valeur):
+    try:
+        return [float(v) for v in str(valeur).split(";")]
+    except ValueError:
+        return None
+
+def patch_oe_vers_majmin(patch_float):
+    major = int(patch_float)
+    minor = round((patch_float - major) * 100)
+    return f"{major}.{minor}"

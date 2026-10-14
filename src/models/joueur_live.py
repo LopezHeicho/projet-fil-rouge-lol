@@ -7,6 +7,31 @@ import streamlit as st
  
 from models.joueur import nettoyer_donnees_joueur
 
+RENOMMAGE_CHAMPIONS = {
+    "AurelionSol": "Aurelion Sol",
+    "Belveth": "Bel'Veth",
+    "Chogath": "Cho'Gath",
+    "DrMundo": "Dr. Mundo",
+    "FiddleSticks": "Fiddlesticks",
+    "JarvanIV": "Jarvan IV",
+    "KSante": "K'Sante",
+    "Kaisa": "Kai'Sa",
+    "Khazix": "Kha'Zix",
+    "KogMaw": "Kog'Maw",
+    "Leblanc": "LeBlanc",
+    "LeeSin": "Lee Sin",
+    "MasterYi": "Master Yi",
+    "MissFortune": "Miss Fortune",
+    "MonkeyKing": "Wukong",
+    "Nunu": "Nunu & Willump",
+    "RekSai": "Rek'Sai",
+    "Renata": "Renata Glasc",
+    "TahmKench": "Tahm Kench",
+    "TwistedFate": "Twisted Fate",
+    "Velkoz": "Vel'Koz",
+    "XinZhao": "Xin Zhao",
+}
+
 """
 Recherche live d'un joueur : va chercher ses
 dernieres games + son rang actuel via l'API Riot, les stocke durablement,
@@ -26,7 +51,7 @@ except ImportError as exc:
  
 DB_PATH = "data/users.db"
 TABLE_NAME = "player_live_matches"
-STATIC_CSV_PATH = "data/player_matches.csv"
+STATIC_DATASET_PATH = "data/player_matches.parquet"
 CACHE_MATCHES = Path("cache/matches")
 CACHE_RUNES = Path("cache/ddragon_runes")
 CACHE_RANKS = Path("cache/league_ranks")
@@ -91,12 +116,14 @@ def _lire_lignes_live():
 # Chargement du dataset complet (CSV statique + base live), nettoye
 # ---------------------------------------------------------------------------
  
-@st.cache_data
+@st.cache_data(show_spinner="Chargement du dataset joueurs...")
 def _charger_csv_statique():
-    return pd.read_csv(STATIC_CSV_PATH, dtype={"patch_major_minor": str}, low_memory=False)
+    df = pd.read_parquet(STATIC_DATASET_PATH)
+    df["patch_major_minor"] = df["patch_major_minor"].astype(str)
+    return df
  
  
-@st.cache_data
+@st.cache_data(show_spinner="Préparation des données joueur...")
 def charger_dataset_complet():
     """DataFrame complet et nettoye (nettoyer_donnees_joueur appliquee une
     seule fois sur l'ensemble), pret pour toutes les fonctions de
@@ -113,6 +140,8 @@ def charger_dataset_complet():
         df = df.drop_duplicates(subset=["matchId", "puuid"], keep="first")
     else:
         df = df_statique.copy()
+
+    df["championName"] = df["championName"].replace(RENOMMAGE_CHAMPIONS)
  
     return nettoyer_donnees_joueur(df)
  
@@ -157,7 +186,10 @@ def rechercher_et_recuperer(game_name, tag_line, region="europe", count=20, queu
         raise RechercheJoueurError("La clé API Riot semble invalide ou expirée (403).") from exc
  
     if not match_ids:
-        raise RechercheJoueurError(f"Aucune game trouvée pour {game_name}#{tag_line} (queue={queue}).")
+        raise RechercheJoueurError(
+            f"Aucune game classée solo/duo trouvée pour {game_name}#{tag_line}. "
+            "Vérifie l'orthographe du pseudo/tag, ou ce compte n'a peut-être pas joué en classé solo/duo récemment."
+        )
  
     all_rows = []
     for match_id in match_ids:

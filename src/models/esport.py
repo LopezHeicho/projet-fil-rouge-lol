@@ -6,6 +6,10 @@ import streamlit as st
 from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+
+from utils import patch_to_tuple, patch_oe_vers_majmin
+from models.champion import classement_buff_nerf_champion, stat_niveau_18
+from models.spell import classement_buff_nerf_spell
  
 DOSSIER_ESPORT = "data/pro_matches_by_year"
  
@@ -21,7 +25,7 @@ def annees_disponibles():
     return sorted((os.path.splitext(os.path.basename(f))[0] for f in fichiers), reverse=True)
  
  
-@st.cache_data
+@st.cache_data(show_spinner="Chargement des données esport...")
 def charger_annee_esport(annee):
     return pd.read_parquet(os.path.join(DOSSIER_ESPORT, f"{annee}.parquet"))
  
@@ -113,8 +117,64 @@ def winrate_player_champion(df, player):
     df_winrate = df_winrate.head(10)
     df_winrate = df_winrate.sort_values(ascending=False, by="winrate")
     return df_winrate
- 
- 
+
+
+def winrate_champion_pro(df_esport, champion, role=None, league=None, patch_majmin=None, min_games=1):
+    """Winrate reel d'un champion en pro (filtrable par role/ligue/patch)."""
+    df_pro = df_esport[df_esport["position"] != "team"]
+    if patch_majmin:
+        df_pro = df_pro[df_pro["patch"].apply(patch_oe_vers_majmin) == patch_majmin]
+    if role:
+        df_pro = df_pro[df_pro["position"] == role]
+    if league:
+        df_pro = df_pro[df_pro["league"] == league]
+    df_champ = df_pro[df_pro["champion"] == champion]
+
+    nb_played = len(df_champ)
+    if nb_played < min_games:
+        return None
+    winrate = (df_champ["result"].mean() * 100).round(2)
+    return {"winrate": winrate, "nb_played": nb_played}
+
+
+def confrontation_stats_winrate_pro(df_champions, df_esport, patch, role=None, league=None, min_games=5):
+    """Pour chaque champion dispo sur ce patch : indice de stats brutes
+    (z-score moyen HP/Armor/Magic Resist/Ad a niveau 18) confronte a son
+    winrate reel en pro (meme patch, role/ligue optionnels)."""
+    df_patch = df_champions[df_champions["patch"] == patch].copy()
+
+    stats_cles = ["HP", "Armor", "Magic Resist", "Ad"]
+    for stat in stats_cles:
+        df_patch[stat] = stat_niveau_18(df_patch, stat)
+        ecart_type = df_patch[stat].std()
+        df_patch[f"z_{stat}"] = (df_patch[stat] - df_patch[stat].mean()) / ecart_type if ecart_type else 0
+
+    df_patch["indice_stats"] = df_patch[[f"z_{s}" for s in stats_cles]].mean(axis=1).round(2)
+
+    patch_majmin = ".".join(patch.split(".")[:2])
+    df_pro = df_esport[df_esport["position"] != "team"].copy()
+    df_pro["patch_majmin"] = df_pro["patch"].apply(patch_oe_vers_majmin)
+    df_pro = df_pro[df_pro["patch_majmin"] == patch_majmin]
+    if role:
+        df_pro = df_pro[df_pro["position"] == role]
+    if league:
+        df_pro = df_pro[df_pro["league"] == league]
+
+    df_winrate = df_pro.groupby("champion").agg(
+        victoires=("result", "sum"),
+        nb_played=("result", "count"),
+    ).reset_index()
+    df_winrate["winrate"] = ((df_winrate["victoires"] / df_winrate["nb_played"]) * 100).round(2)
+    df_winrate = df_winrate[df_winrate["nb_played"] >= min_games]
+
+    resultat = df_patch[["name", "indice_stats"]].merge(
+        df_winrate[["champion", "winrate", "nb_played"]],
+        left_on="name", right_on="champion", how="inner",
+    ).drop(columns="champion")
+
+    return resultat
+
+
 def evolution_joueur(df, player, stat="Winrate"):
     label = ["KDA", "Kill Participation", "Gold / Minute", "Damage / Minute", "Vision / Minute", "Creeps / Minute", "Wards / Minute", "Winrate"]
     if stat not in label:
@@ -173,6 +233,44 @@ def bar_chart_winrate_team_data(df, league):
     df_winrate = df_winrate.sort_values(ascending=False, by="winrate")
  
     return df_winrate
+
+
+def bar_chart_winrate_side_data(df, league):
+    df_teams = df[df["participantid"].isin([100, 200])]
+    df_team = df_teams[df_teams["league"] == league]
+
+    df_winrate = df_team.groupby(["teamname", "side"]).agg(
+        victoire=("result", "sum"),
+        nb_played=("result", "count")
+    ).reset_index()
+
+    df_winrate["winrate"] = (df_winrate["victoire"] / df_winrate["nb_played"]) * 100
+    df_winrate = df_winrate.round(2)
+    df_winrate = df_winrate[df_winrate["nb_played"] >= 5]
+
+    ordre_equipes = (
+        df_winrate.groupby("teamname")["winrate"].mean()
+        .sort_values(ascending=False).index.tolist()
+    )
+    df_winrate["teamname"] = pd.Categorical(df_winrate["teamname"], categories=ordre_equipes, ordered=True)
+    df_winrate = df_winrate.sort_values("teamname")
+
+    return df_winrate
+
+def bar_chart_duree_team_data(df, league):
+    df_teams = df[df["participantid"].isin([100, 200])]
+    df_team = df_teams[df_teams["league"] == league]
+
+    df_duree = df_team.groupby("teamname").agg(
+        duree_moyenne=("gamelength", "mean"),
+        nb_played=("gamelength", "count")
+    ).reset_index()
+
+    df_duree["duree_moyenne"] = (df_duree["duree_moyenne"] / 60).round(2)
+    df_duree = df_duree[df_duree["nb_played"] >= 5]
+    df_duree = df_duree.sort_values(ascending=False, by="duree_moyenne")
+
+    return df_duree
  
  
 def bar_chart_diff_data(df, league, valeur="golddiff", temps=10):
@@ -246,7 +344,7 @@ def bar_chart_team_data(df, team1, team2=None):
         nom_2 = f"Moyenne {league}"
  
     return label, values_1, values_2, nom_2
- 
+
  
 def tableau_stats(df, role, league=None, sort_by="Winrate"):
     stats = ["Winrate", "KDA", "Kill Participation", "Gold / Minute", "Damage / Minute",
@@ -322,7 +420,7 @@ def head_to_head_team(df, team1, team2):
     winrate1 = ((win1 / nb_played) * 100).round(2)
     winrate2 = 100 - winrate1
  
-    df_recap_games = df_games[["year", "league", "result", "gamelength"]].copy()
+    df_recap_games = df_games[["gameid", "year", "league", "result", "gamelength"]].copy()
     df_recap_games["result"] = df_recap_games["result"].replace({0: team2, 1: team1})
     df_recap_games["minute"] = (df_recap_games["gamelength"] // 60).astype(str) + "m"
     df_recap_games["seconde"] = (df_recap_games["gamelength"] % 60).astype(str) + "s"
@@ -334,8 +432,33 @@ def head_to_head_team(df, team1, team2):
     return win1, win2, winrate1, winrate2, df_recap_games
  
  
+def details_game_pro(df, gameid):
+    df_game = df[(df["gameid"] == gameid) & (df["participantid"].between(1, 10))].copy()
+
+    colonnes = ["side", "teamname", "playername", "champion", "position",
+                "kills", "deaths", "assists", "teamkills", "earnedgold", "damagetochampions",
+                "damageshare", "total cs", "result", "gamelength"]
+    df_game = df_game[colonnes]
+
+    blue_side = df_game[df_game["side"] == "Blue"]
+    red_side = df_game[df_game["side"] == "Red"]
+
+    return blue_side, red_side
+
+
 def evolution_team(df, team, stat="Winrate"):
-    label = ["Taux first blood", "Taux first dragon", "Part dragon", "Taux first nashor", "Part nashor", "Taux first tower", "Part tower", "Taux first herald", "Winrate"]
+    label = [
+        "Taux first blood", 
+        "Taux first dragon", 
+        "Part dragon", 
+        "Taux first nashor", 
+        "Part nashor", 
+        "Taux first tower", 
+        "Part tower", 
+        "Taux first herald", 
+        "Winrate", 
+        "Durée de game"
+    ]
     if stat not in label:
         raise ValueError(f"'{stat}' n'est pas une stat valide. Choisis parmi : {label}")
  
@@ -354,7 +477,8 @@ def evolution_team(df, team, stat="Winrate"):
         firsttower=("firsttower", "mean"),
         towers=("towers", "mean"),
         opp_towers=("opp_towers", "mean"),
-        firstherald=("firstherald", "mean")
+        firstherald=("firstherald", "mean"),
+        duree=("gamelength", "mean")
     ).reset_index()
  
     evo["Taux first blood"] = (evo["firstblood"] * 100).round(2)
@@ -366,9 +490,22 @@ def evolution_team(df, team, stat="Winrate"):
     evo["Part tower"] = ((evo["towers"] / (evo["towers"] + evo["opp_towers"])) * 100).round(2)
     evo["Taux first herald"] = (evo["firstherald"] * 100).round(2)
     evo["Winrate"] = ((evo["win"] / evo["nb_played"]) * 100).round(2)
+    evo["Durée de game"] = (evo["duree"] / 60).round(2)
  
     return evo
- 
+
+def evolution_winrate_side(df, team, min_games=5):
+    df_team = df[(df["teamname"] == team) & (df["participantid"].isin([100, 200]))]
+
+    evo = df_team.groupby(["year", "side"]).agg(
+        win=("result", "sum"),
+        nb_played=("result", "count")
+    ).reset_index()
+
+    evo["winrate"] = ((evo["win"] / evo["nb_played"]) * 100).round(2)
+    evo = evo[evo["nb_played"] >= min_games]
+
+    return evo
  
 # ---------------------------------------------------------------------------
 # Fonctions "cluster"
@@ -486,3 +623,120 @@ def cluster_all_roles_standardise(df):
     all_players["cluster"] = kmeans.fit_predict(features_scaled_all)
  
     return all_players, labels
+
+
+def pickrate_champion_role_patch(df, league=None, role=None):
+    df_ligue = df[df["position"] != "team"]
+    if league is not None:
+        df_ligue = df_ligue[df_ligue["league"] == league]
+    if role is not None:
+        df_ligue = df_ligue[df_ligue["position"] == role]
+
+    nb_total = df_ligue.groupby("patch").size()
+    nb_pick = df_ligue.groupby(["patch", "champion"]).size()
+
+    pickrate = nb_pick.div(nb_total, level="patch").reset_index(name="pickrate")
+    pickrate["pickrate"] = (pickrate["pickrate"] * 100).round(2)
+    return pickrate
+
+
+def changements_champion_et_spell(df_champions, df_spells):
+    _, resultats_champion = classement_buff_nerf_champion(df_champions)
+    _, resultats_spell = classement_buff_nerf_spell(df_spells)
+
+    resultats_champion = resultats_champion.rename(columns={"Patch": "patch"})
+
+    # champion_spells_by_patch utilise le slug (ex. "Chogath"), pas le nom
+    # affiché ("Cho'Gath") -> on repasse par champions_by_patch pour
+    # retrouver le nom affiché a partir du slug.
+    slug_vers_nom = df_champions.drop_duplicates("id", keep="last").set_index("id")["name"]
+    resultats_spell = resultats_spell.copy()
+    resultats_spell["name"] = resultats_spell["champion_id"].map(slug_vers_nom)
+
+    changements = pd.concat([
+        resultats_champion[["name", "patch", "type_changement"]],
+        resultats_spell[["name", "patch", "type_changement"]],
+    ], ignore_index=True)
+
+    changements["patch_majmin"] = changements["patch"].str.extract(r"^(\d+\.\d+)\.")[0]
+
+    score = changements.groupby(["name", "patch_majmin"]).agg(
+        nb_buffs=("type_changement", lambda x: (x == "buff").sum()),
+        nb_nerfs=("type_changement", lambda x: (x == "nerf").sum()),
+    ).reset_index()
+    score["score"] = score["nb_buffs"] - score["nb_nerfs"]
+
+    return score
+
+@st.cache_data(show_spinner="Calcul de la corrélation pick-rate / changements...")
+def correlation_pickrate_changements(df_matchs, df_champions, df_spells, league, role=None):
+    changements = changements_champion_et_spell(df_champions, df_spells)
+    pickrate = pickrate_champion_role_patch(df_matchs, league, role)
+    pickrate["patch_majmin"] = pickrate["patch"].apply(patch_oe_vers_majmin)
+
+    all_patchs = sorted(pickrate["patch_majmin"].unique(), key=patch_to_tuple)
+
+    resultats = []
+    for _, ligne in changements.iterrows():
+        champion, patch = ligne["name"], ligne["patch_majmin"]
+
+        if patch not in all_patchs:
+            continue
+        idx = all_patchs.index(patch)
+        if idx == 0:
+            continue
+        patch_avant = all_patchs[idx - 1]
+
+        pick_apres = pickrate[(pickrate["patch_majmin"] == patch) & (pickrate["champion"] == champion)]
+        pick_avant = pickrate[(pickrate["patch_majmin"] == patch_avant) & (pickrate["champion"] == champion)]
+
+        pickrate_apres = pick_apres["pickrate"].sum() if not pick_apres.empty else 0
+        pickrate_avant = pick_avant["pickrate"].sum() if not pick_avant.empty else 0
+
+        resultats.append({
+            "champion": champion,
+            "patch": patch,
+            "nb_buffs": ligne["nb_buffs"],
+            "nb_nerfs": ligne["nb_nerfs"],
+            "score": ligne["score"],
+            "pickrate_avant": round(pickrate_avant, 2),
+            "pickrate_apres": round(pickrate_apres, 2),
+            "delta_pickrate": round(pickrate_apres - pickrate_avant, 2),
+        })
+
+    return pd.DataFrame(resultats)
+
+def classement_pickrate_champion_role(df, league=None, role=None, top_n=10):
+    df_joueurs = df[df["position"] != "team"]
+    if league is not None:
+        df_joueurs = df_joueurs[df_joueurs["league"] == league]
+    if role is not None:
+        df_joueurs = df_joueurs[df_joueurs["position"] == role]
+
+    nb_total = len(df_joueurs)
+    if nb_total == 0:
+        return pd.DataFrame(columns=["champion", "nb_picks", "pickrate"])
+
+    classement = df_joueurs.groupby("champion").size().reset_index(name="nb_picks")
+    classement["pickrate"] = (classement["nb_picks"] / nb_total * 100).round(2)
+    classement = classement.sort_values("pickrate", ascending=False).head(top_n).reset_index(drop=True)
+    return classement
+
+
+def classement_buff_nerf_saison(df_champions, df_spells, season="16", top_n=15):
+    score = changements_champion_et_spell(df_champions, df_spells)
+    score_saison = score[score["patch_majmin"].str.startswith(season)]
+    if score_saison.empty:
+        return pd.DataFrame(columns=["name", "nb_buffs", "nb_nerfs", "nb_patchs_touches", "score"])
+
+    cumul = score_saison.groupby("name").agg(
+        nb_buffs=("nb_buffs", "sum"),
+        nb_nerfs=("nb_nerfs", "sum"),
+        nb_patchs_touches=("patch_majmin", "nunique"),
+    ).reset_index()
+    cumul["score"] = cumul["nb_buffs"] - cumul["nb_nerfs"]
+
+    cumul["score_abs"] = cumul["score"].abs()
+    cumul = cumul.sort_values("score_abs", ascending=False).head(top_n)
+    cumul = cumul.drop(columns="score_abs").sort_values("score", ascending=False)
+    return cumul

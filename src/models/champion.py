@@ -1,20 +1,26 @@
 import streamlit as st
 import numpy as np
 import pandas as pd 
-from utils import patch_to_tuple
+from utils import patch_to_tuple, valeurs_numeriques
 
-@st.cache_data
+STATS_INVERSEES = {}
+
+@st.cache_data(show_spinner="Chargement des données champions...")
 def charger_donnees_champions():
-    df = pd.read_csv("data/champions_by_patch.csv")
+    df = pd.read_parquet("data/champions_by_patch.parquet")
 
     df = df.drop(index=df[df["patch"].str.startswith("0.")].index)
+    df = df.drop(index=df[df["patch"].str.split(".").str[-1].str.len() > 2].index)
+    df["partype"] = df["partype"].replace({"MP": "Mana"})
 
     corrections = {"Figher": "Fighter", "Suppport": "Support"}
     df["tags"] = df["tags"].str.split(r"[;,]", regex=True).apply(
         lambda tags: ";".join(corrections.get(tag.strip().capitalize(), tag.strip().capitalize()) for tag in tags)
     )
 
-    df["stat_attackspeed"] = df["stat_attackspeed"].fillna(0.625 * (1 + df["stat_attackspeedoffset"])).round(3)
+    df["stat_attackspeed"] = df["stat_attackspeed"].fillna(0.625 / (1 + df["stat_attackspeedoffset"])).round(3)
+
+    df.round(2)
 
     return df
 
@@ -215,8 +221,17 @@ def changement_champion_patch(df, patch_1, patch_2=None):
     df_patch_1 = df[df["patch"] == patch_1]
     df_patch_2 = df[df["patch"] == patch_2]
 
+    # "stat_attackdamageperlevel" exclue (trouve le 2026-10-08) : passe a 0.0
+    # pour TOUS les champions a partir du patch 16.5.1 et y reste sur tous les
+    # patchs suivants -- un vrai changement de design mettrait la croissance
+    # d'AD a zero pour tout le roster (y compris les hyper-carries auto-attack
+    # comme Vayne/Kog'Maw), ce qui casserait le jeu. C'est un trou d'extraction
+    # cote Data Dragon (meme famille que le trou stat_attackspeedoffset deja
+    # documente, pas corrige a la source) : sans exclusion, ca cree ~160 faux
+    # "nerfs" d'un coup sur la transition 16.4.1->16.5.1, qui remontent dans
+    # TOUTE analyse cumulee incluant cette transition (ex. classement_buff_nerf_saison).
     colonne_a_exclure = ["id", "patch", "title", "tags", "attack", "defense", "magic", "difficulty",
-                          "is_variant", "stat_attackspeedoffset"]
+                          "is_variant", "stat_attackspeedoffset", "stat_attackdamageperlevel"]
     df_patch_1 = df_patch_1.drop(columns=colonne_a_exclure)
     df_patch_2 = df_patch_2.drop(columns=colonne_a_exclure)
 
@@ -240,12 +255,148 @@ def changement_champion_patch(df, patch_1, patch_2=None):
 
         lignes_changees = df_fusion[df_fusion[col_avant] != df_fusion[col_apres]]
         for _, ligne in lignes_changees.iterrows():
+            valeurs_avant = valeurs_numeriques(ligne[col_avant])
+            valeurs_apres = valeurs_numeriques(ligne[col_apres])
+
+            type_changement = None
+            if valeurs_avant is not None and valeurs_apres is not None:
+                moyenne_avant = sum(valeurs_avant) / len(valeurs_avant)
+                moyenne_apres = sum(valeurs_apres) / len(valeurs_apres)
+                if moyenne_apres != moyenne_avant:
+                    if stat in STATS_INVERSEES:
+                        type_changement = "buff" if moyenne_apres < moyenne_avant else "nerf"
+                    else:
+                        type_changement = "buff" if moyenne_apres > moyenne_avant else "nerf"
+            
             liste.append({
                 "champion_id": ligne["key"],
                 "name": ligne["name_avant"],
                 "stat": stat,
                 "avant": ligne[col_avant],
-                "apres": ligne[col_apres]
+                "apres": ligne[col_apres],
+                "type_changement": type_changement
             })
 
     return pd.DataFrame(liste)
+
+def stat_niveau_18(df, stat):
+    colonne_stat = {
+        "HP": ("stat_hp", "stat_hpperlevel"),
+        "Regen HP": ("stat_hpregen", "stat_hpregenperlevel"),
+        "Mana": ("stat_mp", "stat_mpperlevel"),
+        "Regen Mana": ("stat_mpregen", "stat_mpregenperlevel"),
+        "Armor": ("stat_armor", "stat_armorperlevel"),
+        "Magic Resist": ("stat_spellblock", "stat_spellblockperlevel"),
+        "Ad": ("stat_attackdamage", "stat_attackdamageperlevel"),
+    }
+
+    if stat == "As":
+        return df["stat_attackspeed"] * (1 + 17 * df["stat_attackspeedperlevel"] / 100)
+
+    colonne_base, colonne_perlevel = colonne_stat[stat]
+    return df[colonne_base] + 17 * df[colonne_perlevel]
+
+
+def power_creep(df, stat, cohort_fixe=False):
+    df = df.copy()
+
+    if cohort_fixe:
+        premier_patch = sorted(df["patch"].unique(), key=patch_to_tuple)[0]
+        champions_historiques = df[df["patch"] == premier_patch]["name"].unique()
+        df = df[df["name"].isin(champions_historiques)]
+
+    df["stat_niveau_18"] = stat_niveau_18(df, stat)
+
+    all_patchs = sorted(df["patch"].unique(), key=patch_to_tuple)
+    evo = df.groupby("patch")["stat_niveau_18"].mean().reindex(all_patchs).reset_index()
+    return evo
+
+def classement_buff_nerf_champion(df, nb_champions=10):
+    all_patchs = sorted(df["patch"].unique(), key=patch_to_tuple)
+    patch_1 = all_patchs[-1]
+    patch_2 = all_patchs[-2]
+
+    df_changements = changement_champion_patch(df, patch_1, patch_2)
+
+    if df_changements.empty:
+        return pd.DataFrame()
+
+    df_buff = df_changements[df_changements["type_changement"] == "buff"]
+    df_nerf = df_changements[df_changements["type_changement"] == "nerf"]
+
+    classement_buff = df_buff.groupby("name").size().reset_index(name="nb_buffs")
+    classement_nerf = df_nerf.groupby("name").size().reset_index(name="nb_nerfs")
+
+    classement = pd.merge(classement_buff, classement_nerf, on="name", how="outer").fillna(0)
+    classement["nb_buffs"] = classement["nb_buffs"].astype(int)
+    classement["nb_nerfs"] = classement["nb_nerfs"].astype(int)
+    classement["score"] = classement["nb_buffs"] - classement["nb_nerfs"]
+
+    classement_affiche = classement.sort_values(by="score", ascending=False).head(nb_champions).reset_index(drop=True)
+
+    if not classement_affiche.empty:
+        classement_affiche["_tri"] = classement_affiche.apply(lambda row: (row["score"], row["nb_buffs"], -row["nb_nerfs"]), axis=1)
+        classement_affiche = classement_affiche.sort_values("_tri", ascending=False).drop(columns="_tri").reset_index(drop=True)
+
+    return classement_affiche
+@st.cache_data(show_spinner="Analyse des changements de champions...")
+def classement_buff_nerf_champion(df):
+
+    all_patchs = sorted(df["patch"].unique(), key=patch_to_tuple)
+    resultats = []
+
+    for patch in all_patchs:
+        df_changement = changement_champion_patch(df, patch)
+        df_changement["Patch"] = patch
+        resultats.append(df_changement)
+
+    resultats = pd.concat(resultats, ignore_index=True).round(2)
+
+    classement = resultats.groupby("name").agg(
+        nb_changements=("type_changement", "count"),
+        nb_buffs=("type_changement", lambda x: (x == "buff").sum()),
+        nb_nerfs=("type_changement", lambda x: (x == "nerf").sum())
+    ).sort_values("nb_changements", ascending=False).reset_index()
+
+    return classement, resultats
+
+def detail_buff_nerf_champion(df, name):
+    _, resultats = classement_buff_nerf_champion(df)
+    return resultats[resultats["name"] == name]
+
+CLASSES_ROLE = ["Fighter", "Mage", "Tank", "Assassin", "Support", "Marksman"]
+
+def composition_roster_par_patch(df):
+    df_valide = df[df["is_variant"] == False]
+
+    df_tags = df_valide[["patch", "id", "tags"]].copy()
+    df_tags["tags"] = df_tags["tags"].str.split(";")
+    df_tags = df_tags.explode("tags")
+    df_tags = df_tags[df_tags["tags"].isin(CLASSES_ROLE)]
+
+    composition = df_tags.groupby(["patch", "tags"])["id"].nunique().unstack("tags", fill_value=0)
+
+    all_patchs = sorted(df_valide["patch"].unique(), key=patch_to_tuple)
+    composition = composition.reindex(all_patchs, fill_value=0)
+
+    return composition
+
+def classer_ressource(partype):
+    if partype == "Mana":
+        return "Mana"
+    if partype == "Energy":
+        return "Energy"
+    if pd.isna(partype):
+        return "Aucune ressource"
+    return "Ressource alternative"
+
+def evolution_type_ressource(df):
+    df_valide = df[df["is_variant"] == False].copy()
+    df_valide["categorie_ressource"] = df_valide["partype"].apply(classer_ressource)
+
+    evolution = df_valide.groupby(["patch", "categorie_ressource"])["id"].nunique().unstack("categorie_ressource", fill_value=0)
+
+    all_patchs = sorted(df_valide["patch"].unique(), key=patch_to_tuple)
+    evolution = evolution.reindex(all_patchs, fill_value=0)
+
+    return evolution

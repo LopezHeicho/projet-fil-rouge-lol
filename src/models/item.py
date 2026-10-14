@@ -1,11 +1,14 @@
 import streamlit as st 
 import pandas as pd
 import re
-from utils import patch_to_tuple
+import difflib
+from utils import patch_to_tuple, valeurs_numeriques
 
 # ---------------------------------------------------------------------------
 # Constantes utilisées lors du nettoyage
 # ---------------------------------------------------------------------------
+
+STATS_INVERSEES = {"Cout d'achat"}
 
 STATS_VALIDES = {
     "Tenacity", "Lethality", "Ability Haste", "Grievous Wounds", "Heal and Shield Power",
@@ -123,12 +126,11 @@ def stat_deja_presente(row, nom_stat, mapping):
 # Chargement + nettoyage (mis en cache)
 # ---------------------------------------------------------------------------
 
-@st.cache_data
+@st.cache_data(show_spinner="Chargement des données items...")
 def charger_donnees_items():
-    df = pd.read_csv(
-        "data/items_by_patch.csv",
-        dtype={"item_id": str, "maps": str, "required_ally": str}
-    )
+    df = pd.read_parquet("data/items_by_patch.parquet")
+    df[["item_id", "maps", "required_ally"]] = df[["item_id", "maps", "required_ally"]].astype(str)
+    df = df.replace(r"^game_item_\w+_\d+$", None, regex=True)
 
     # Certains item_id (ex: 3632) apparaissent sur des patchs où l'item n'existe
     # plus, avec toutes les colonnes à 0 au lieu de NaN (name=0, tags=0, etc.).
@@ -225,7 +227,9 @@ def charger_donnees_items():
     })
     df = df.rename(columns={c: c.replace("extrait_", "") for c in colonnes_restantes})
 
-    df = df.fillna(0)
+    colonnes_texte = ["plaintext", "description"]
+    colonnes_a_remplir = [c for c in df.columns if c not in colonnes_texte]
+    df[colonnes_a_remplir] = df[colonnes_a_remplir].fillna(0)
 
     df["efficiency_gold"] = 0
     for colonne, valeur in DICO_VALEUR_GOLD.items():
@@ -371,7 +375,7 @@ def changement_item_patch(df, patch_1, patch_2=None):
     colonnes_a_exclure = [
         "patch", "plaintext", "tags", "description", "colloq", "gold_base", "gold_sell", "purchasable",
         "depth", "from", "into", "maps", "image_full", "required_champion", "required_ally",
-        "special_recipe", "in_store", "hide_from_all", "consumed", "consume_on_full", "stacks",
+        "special_recipe", "in_store", "hide_from_all", "consumed", "consume_on_full", "stacks", "efficiency_gold",
     ]
     df_patch_1 = df_patch_1.drop(columns=colonnes_a_exclure)
     df_patch_2 = df_patch_2.drop(columns=colonnes_a_exclure)
@@ -395,12 +399,26 @@ def changement_item_patch(df, patch_1, patch_2=None):
             continue
         ligne_changees = df_fusion[df_fusion[col_avant] != df_fusion[col_apres]]
         for _, ligne in ligne_changees.iterrows():
+            valeurs_avant = valeurs_numeriques(ligne[col_avant])
+            valeurs_apres = valeurs_numeriques(ligne[col_apres])
+
+            type_changement = None
+            if valeurs_avant is not None and valeurs_apres is not None:
+                moyenne_avant = sum(valeurs_avant) / len(valeurs_avant)
+                moyenne_apres = sum(valeurs_apres) / len(valeurs_apres)
+                if moyenne_apres != moyenne_avant:
+                    if stat in STATS_INVERSEES:
+                        type_changement = "buff" if moyenne_apres < moyenne_avant else "nerf"
+                    else:
+                        type_changement = "buff" if moyenne_apres > moyenne_avant else "nerf"
+
             liste.append({
                 "item_id": ligne["item_id"],
                 "name": ligne["name_avant"],
                 "stat": stat,
                 "avant": ligne[col_avant],
-                "apres": ligne[col_apres]
+                "apres": ligne[col_apres],
+                "type_changement" : type_changement
             })
 
     return pd.DataFrame(liste)
@@ -490,3 +508,271 @@ def comparaison_item(df, patch, item1=None, item_id1=None, item2=None, item_id2=
     nom_item2 = item2 if item2 is not None else "moyenne du patch"
 
     return erreurs, ambiguites, avertissements, noms_stats, valeurs_norm_1, valeurs_norm_2, valeurs_brutes_1, valeurs_brutes_2, nom_item1, nom_item2
+
+def budget_item_type(df, patch, type=None, budget_min=None, budget_max=None):
+    """Retourne (avertissement, df_budget)."""
+    df_patch = df[df["patch"] == patch]
+
+    df_patch = df_patch[df_patch["purchasable"] == True]
+    df_patch = df_patch[df_patch["maps"].str.contains("11", na=False)]
+
+    if type:
+        df_type = df_patch[df_patch["tags"].str.contains(type, case=False, na=False)]
+    else:
+        df_type = df_patch
+
+    avertissement = None
+    if type and df_type.empty:
+        avertissement = f"Aucun item avec le tag '{type}' trouvé sur le patch {patch}."
+
+    df_budget = df_type[
+        (df_type["Cout d'achat"] >= budget_min) & (df_type["Cout d'achat"] <= budget_max)
+    ]
+
+    df_budget = df_budget.sort_values(ascending=True, by="Cout d'achat")
+    df_budget = df_budget[["name", "tags", "Cout d'achat"]]
+
+    return avertissement, df_budget
+
+def _fusionner_doublons_item_id(df_sr):
+    """Detecte les cas ou plusieurs item_id partagent le meme nom sur le
+    meme patch avec des stats identiques (doublons Data Dragon, ex. Rod of
+    Ages 6657/326657), et les fusionne vers un seul item_id canonique."""
+    colonnes_stats = [c for c in df_sr.columns if c.startswith("stat_")]
+    colonnes_comparaison = colonnes_stats + ["gold_base", "gold_total", "gold_sell", "plaintext"]
+    colonnes_comparaison = [c for c in colonnes_comparaison if c in df_sr.columns]
+
+    mapping_fusion = {}
+    for (name, patch), lignes in df_sr.groupby(["name", "patch"]):
+        ids = lignes["item_id"].unique()
+        if len(ids) < 2:
+            continue
+        lignes_uniques = lignes[colonnes_comparaison].drop_duplicates()
+        if len(lignes_uniques) == 1:
+            id_canonique = sorted(ids, key=str)[0]
+            for autre_id in ids:
+                if autre_id != id_canonique:
+                    mapping_fusion[autre_id] = id_canonique
+
+    df_fusionne = df_sr.copy()
+    df_fusionne["item_id"] = df_fusionne["item_id"].replace(mapping_fusion)
+    return df_fusionne
+
+
+def _texte_effet_seul(texte):
+    """Retire le bloc de stats brutes (lignes "<nombre> <NomStat>") pour ne
+    garder que le texte qui decrit vraiment le passif/actif, puis retire les
+    chiffres restants."""
+    if not isinstance(texte, str):
+        return None
+    lignes = texte.split("\n")
+    lignes_effet = [l for l in lignes if not re.match(r"^\+?\d+(\.\d+)?%?\s+[A-Z]", l.strip())]
+    texte_effet = " ".join(lignes_effet)
+    texte_effet = re.sub(r"\d+(\.\d+)?%?", "", texte_effet)
+    return re.sub(r"\s+", " ", texte_effet).strip()
+
+
+def _sont_similaires(texte_a, texte_b, seuil=0.75):
+    """True si deux textes sont assez proches pour etre consideres comme
+    'le meme kit' malgre de petites differences de formulation (ou des
+    placeholders Data Dragon non resolus comme {{ Item_Mythic_Passive }}
+    qui deviennent du texte reel selon la version)."""
+    if not isinstance(texte_a, str) or not isinstance(texte_b, str):
+        return texte_a == texte_b
+    return difflib.SequenceMatcher(None, texte_a, texte_b).ratio() >= seuil
+
+
+def _reworks_plaintext(df_item_id, patches_tries, seuil_trou=50):
+    df_tri = df_item_id.copy()
+    df_tri["_patch_key"] = df_tri["patch"].apply(patch_to_tuple)
+    df_tri = df_tri.sort_values("_patch_key").drop_duplicates(subset="patch").reset_index(drop=True)
+
+    index_patch = {p: i for i, p in enumerate(patches_tries)}
+    indices_globaux = df_tri["patch"].map(index_patch)
+    ecarts = indices_globaux.diff()
+
+    trous = ecarts[ecarts > seuil_trou]
+    if len(trous) > 0:
+        derniere_position_trou = trous.index[-1]
+        df_tri = df_tri.iloc[derniere_position_trou:].reset_index(drop=True)
+
+    texte_kit = df_tri["plaintext"]
+    if "description" in df_tri.columns:
+        texte_kit = texte_kit.where(texte_kit.notna(), df_tri["description"].apply(_texte_effet_seul))
+
+    texte_prec = texte_kit.shift()
+    patch_prec = df_tri["patch"].shift()
+
+    masque_changement = texte_prec.notna() & ~pd.Series(
+        [_sont_similaires(a, b) for a, b in zip(texte_prec, texte_kit)],
+        index=texte_kit.index,
+    )
+
+    df_evt = pd.DataFrame({
+        "type": "Changement de kit",
+        "patch_avant": patch_prec[masque_changement],
+        "patch_apres": df_tri.loc[masque_changement, "patch"],
+        "avant": texte_prec[masque_changement],
+        "apres": texte_kit[masque_changement],
+    })
+    return df_evt.to_dict("records")
+
+
+def _construire_lineages(df_sr):
+    """Regroupe les item_id en 'lignees' : un item peut changer de nom au fil
+    du temps sans changer d'item_id (ex. Luden's Echo -> Luden's Tempest ->
+    Luden's Echo), et peut aussi changer d'item_id en gardant son nom (vrai
+    nouvel identifiant Data Dragon). Deux item_id appartiennent a la meme
+    lignee des qu'ils ont, a un moment ou un autre, porte le meme nom
+    (composantes connexes du graphe nom <-> item_id).
+
+    Retourne une liste de dicts {"ids": [...], "nom_affiche": str}, ou
+    nom_affiche est le nom porte au patch le plus recent de la lignee."""
+    noms_par_id = df_sr.groupby("item_id")["name"].apply(set).to_dict()
+    ids_par_nom = df_sr.groupby("name")["item_id"].apply(set).to_dict()
+
+    ids_non_visites = set(df_sr["item_id"].unique())
+    lineages = []
+
+    while ids_non_visites:
+        depart = ids_non_visites.pop()
+        a_explorer = [depart]
+        ids_lineage = {depart}
+
+        while a_explorer:
+            id_courant = a_explorer.pop()
+            for nom in noms_par_id.get(id_courant, set()):
+                for autre_id in ids_par_nom.get(nom, set()):
+                    if autre_id not in ids_lineage:
+                        ids_lineage.add(autre_id)
+                        ids_non_visites.discard(autre_id)
+                        a_explorer.append(autre_id)
+
+        lignes_lineage = df_sr[df_sr["item_id"].isin(ids_lineage)].copy()
+        lignes_lineage["_patch_key"] = lignes_lineage["patch"].apply(patch_to_tuple)
+        nom_affiche = lignes_lineage.sort_values("_patch_key")["name"].iloc[-1]
+
+        lineages.append({"ids": sorted(ids_lineage, key=str), "nom_affiche": nom_affiche})
+
+    return lineages
+
+
+@st.cache_data(show_spinner="Analyse des reworks d'items...")
+def classement_rework_item(df):
+    """Classement des items (par lignee, cf _construire_lineages) selon le
+    nombre total de reworks : changements d'item_id (hors doublons Data
+    Dragon et hors objets simultanement differents type Enchantment) +
+    changements de kit (plaintext, ou description en repli) a item_id
+    constant."""
+    df_sr = df[df["maps"].str.contains("11", na=False)]
+    df_sr = df_sr[df_sr["purchasable"] != False]
+    df_sr = _fusionner_doublons_item_id(df_sr)
+
+    simultane = df_sr.groupby(["name", "patch"])["item_id"].nunique()
+    noms_simultanes = set(simultane[simultane > 1].index.get_level_values("name"))
+
+    lineages = _construire_lineages(df_sr)
+    patches_tries = sorted(df_sr["patch"].unique(), key=patch_to_tuple)
+
+    resultats = []
+    for lineage in lineages:
+        ids = lineage["ids"]
+        lignes_lineage = df_sr[df_sr["item_id"].isin(ids)]
+
+        if noms_simultanes & set(lignes_lineage["name"].unique()):
+            continue
+
+        nb_changements_id = len(ids) - 1
+
+        nb_changements_kit = 0
+        for item_id in ids:
+            historique_id = df_sr[df_sr["item_id"] == item_id]
+            nb_changements_kit += len(_reworks_plaintext(historique_id, patches_tries))
+
+        total = nb_changements_id + nb_changements_kit
+        if total > 0:
+            resultats.append({
+                "name": lineage["nom_affiche"],
+                "nb_changements_id": nb_changements_id,
+                "nb_changements_kit": nb_changements_kit,
+                "nb_reworks": total,
+            })
+
+    classement = pd.DataFrame(resultats).sort_values("nb_reworks", ascending=False).reset_index(drop=True)
+    return classement
+
+
+@st.cache_data(show_spinner="Détail des changements de l'item...")
+def detail_reworks_item(df, name):
+    """Detail chronologique de tous les reworks (changements d'item_id et
+    changements de kit) pour la lignee complete de l'item portant ce nom a
+    un moment ou un autre de son histoire."""
+    df_sr = df[df["maps"].str.contains("11", na=False)]
+    df_sr = _fusionner_doublons_item_id(df_sr)
+
+    lineages = _construire_lineages(df_sr)
+    patches_tries = sorted(df_sr["patch"].unique(), key=patch_to_tuple)
+    lineage = next(
+        (l for l in lineages if name in df_sr[df_sr["item_id"].isin(l["ids"])]["name"].unique()),
+        None
+    )
+    if lineage is None:
+        return pd.DataFrame()
+
+    ids = lineage["ids"]
+    lignes_lineage = df_sr[df_sr["item_id"].isin(ids)].copy()
+    lignes_lineage["_patch_key"] = lignes_lineage["patch"].apply(patch_to_tuple)
+
+    ids_tries = sorted(
+        ids,
+        key=lambda i: lignes_lineage[lignes_lineage["item_id"] == i]["_patch_key"].min()
+    )
+
+    evenements = []
+    for id_avant, id_apres in zip(ids_tries, ids_tries[1:]):
+        historique_avant = lignes_lineage[lignes_lineage["item_id"] == id_avant].sort_values("_patch_key")
+        historique_apres = lignes_lineage[lignes_lineage["item_id"] == id_apres].sort_values("_patch_key")
+        evenements.append({
+            "type": "Nouvel identifiant",
+            "patch_avant": historique_avant["patch"].iloc[-1],
+            "patch_apres": historique_apres["patch"].iloc[0],
+            "avant": f"item_id {id_avant}",
+            "apres": f"item_id {id_apres}",
+        })
+
+    for item_id in ids:
+        historique_id = df_sr[df_sr["item_id"] == item_id]
+        evenements.extend(_reworks_plaintext(historique_id, patches_tries))
+
+    df_evenements = pd.DataFrame(evenements)
+    if not df_evenements.empty:
+        df_evenements["_tri"] = df_evenements["patch_apres"].apply(patch_to_tuple)
+        df_evenements = df_evenements.sort_values("_tri").drop(columns="_tri").reset_index(drop=True)
+
+    return df_evenements
+@st.cache_data(show_spinner="Analyse des changements d'items...")
+def classement_buff_nerf_item(df):
+
+    all_patchs = sorted(df["patch"].unique(), key=patch_to_tuple)
+    resultats = []
+
+    for patch in all_patchs:
+        df_changement = changement_item_patch(df, patch)
+        df_changement["patch"] = patch
+        resultats.append(df_changement)
+
+    resultats = pd.concat(resultats, ignore_index=True).round(2)
+
+    classement = resultats.groupby("item_id").agg(
+        name=("name", "first"),
+        nb_changements=("type_changement", "count"),
+        nb_buffs=("type_changement", lambda x: (x == "buff").sum()),
+        nb_nerfs=("type_changement", lambda x: (x == "nerf").sum())
+    ).sort_values("nb_changements", ascending=False).reset_index()
+
+    return classement, resultats
+
+def detail_buff_nerf_item(df, item_id):
+    _, resultats = classement_buff_nerf_item(df)
+    return resultats[resultats["item_id"] == item_id]
+
