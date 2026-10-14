@@ -11,7 +11,7 @@ from src.views import home, joueur, draft, esport, meta, login, logout
 from src.router import get_route, redirect
 import utils as utl
 
-st.set_page_config(layout="wide", page_title="Projet Fil Rouge")
+st.set_page_config(layout="wide", page_title="Projet Fil Rouge", initial_sidebar_state="expanded")
 
 utl.inject_custom_css()
 utl.navbar_component()
@@ -46,3 +46,6 @@ def navigation():
         home.load_view()
 
 navigation()
+
+utl.footer_disclaimer()
+utl.sidebar_logo()
