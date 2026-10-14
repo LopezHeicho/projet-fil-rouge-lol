@@ -370,6 +370,7 @@ RANK_COLUMNS = [
     for field in ("tier", "rank", "lp", "wins", "losses")
 ]
 
+CACHE_MAX_AGE_SECONDS = 15 * 60  # 15 minutes
 
 def resolve_rank(puuid, platform, platform_clients, api_key, cache_dir: Path):
     """Renvoie la liste brute d'entrees league-v4 d'un joueur (solo/flex),
@@ -382,7 +383,9 @@ def resolve_rank(puuid, platform, platform_clients, api_key, cache_dir: Path):
     sont interroges."""
     cache_path = cache_dir / f"{puuid}.json"
     if cache_path.exists():
-        return json.loads(cache_path.read_text(encoding="utf-8"))
+        age = time.time() - cache_path.stat().st_mtime
+        if age < CACHE_MAX_AGE_SECONDS:
+            return json.loads(cache_path.read_text(encoding="utf-8"))
 
     if platform not in platform_clients:
         platform_clients[platform] = PlatformClient(api_key, platform)
