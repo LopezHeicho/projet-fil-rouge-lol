@@ -1,3 +1,20 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Work+Sans:wght@400;500;600&display=swap');
+
+html, body, [data-testid="stAppViewContainer"], [data-testid="stSidebar"]{
+    font-family: 'Work Sans', sans-serif;
+}
+
+h1, h2, h3, h4, h5,
+[data-testid="stAppViewContainer"] h1,
+[data-testid="stAppViewContainer"] h2,
+[data-testid="stAppViewContainer"] h3,
+[data-testid="stAppViewContainer"] h4,
+[data-testid="stAppViewContainer"] h5,
+.brand .brand-link{
+    font-family: 'Cinzel', serif !important;
+    letter-spacing: 0.5px;
+}
+
 .navbar-wrap{
     position: sticky;
     top: 0;
@@ -9,9 +26,10 @@
 .navbar{
     font-family: 'Trebuchet MS', sans-serif;
     width: 100%;
-    background: linear-gradient(135deg, #0047FF, #79F4C9);
+    background: linear-gradient(135deg, #0A1428, #1E2328);
+    border: 1px solid #785A28;
     border-radius: 14px;
-    box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.45);
 }
 
 .nav-container{
@@ -22,10 +40,18 @@
 }
 
 .brand .brand-link{
-    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #C8AA6E;
     text-decoration: none;
     font-weight: 700;
     letter-spacing: 0.3px;
+}
+
+.brand-logo{
+    height: 48px;
+    width: auto;
 }
 
 .navlist{
@@ -40,7 +66,7 @@
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    color: #ffffff !important;
+    color: #F0E6D2 !important;
     text-decoration: none !important;
     padding: 10px 14px;
     border-radius: 10px;
@@ -49,31 +75,31 @@
 }
 
 .navitem:hover{
-    background: rgba(255,255,255,0.14);
+    background: rgba(200,155,60,0.18);
+    color: #C8AA6E !important;
     transform: translateY(-1px);
 }
-
 
 .settings{
     height:1rem;
 }
 
 .version-span{
-    color: white;
+    color: #C8AA6E;
     position: absolute;
     right: 1rem;
     bottom: 1.75rem;
-    opacity: 0.5;
+    opacity: 0.6;
     z-index: 9999;
-    border: 2px solid #333;
+    border: 2px solid #785A28;
     border-radius: 25px;
     padding-right: 0.5rem;
     padding-left: 0.5rem;
-    background: #333;
+    background: #0A1428;
 }
 
 .dropbtn {
-    background-color: rgba(255,255,255,0.12);
+    background-color: rgba(200,170,110,0.12);
     color: white;
     padding: 8px;
     font-size: 14px;
@@ -87,7 +113,7 @@
 }
 
 .dropbtn:hover, .dropbtn:focus {
-    background-color: rgba(255,255,255,0.22);
+    background-color: rgba(200,170,110,0.22);
     opacity:1;
 }
 
@@ -101,10 +127,11 @@
     top: 44px;
     right: 0;
     border-radius: 12px;
-    background-color: rgba(33,33,33,0.98);
+    background-color: #1E2328;
+    border: 1px solid #785A28;
     min-width: 200px;
     overflow: auto;
-    box-shadow: 0px 12px 24px rgba(0,0,0,0.25);
+    box-shadow: 0px 12px 24px rgba(0,0,0,0.4);
     padding: 6px;
     opacity: 0;
     pointer-events: none;
@@ -112,7 +139,7 @@
 }
 
 .dropdown-content a {
-    color: white;
+    color: #F0E6D2;
     padding: 10px 12px;
     text-decoration: none;
     display: block;
@@ -121,8 +148,124 @@
     transition: background 0.2s ease;
 }
 
-.dropdown a:hover {background-color: rgba(255,255,255,0.08);}
+.dropdown a:hover {background-color: rgba(200,170,110,0.1);}
 
 iframe{
     height: 0rem;
+}
+
+[data-testid="stSidebar"]{
+    background: linear-gradient(180deg, #0A1428 0%, #1E2328 100%);
+    border-right: 1px solid #785A28;
+}
+
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] p,
+[data-testid="stSidebar"] span,
+[data-testid="stSidebar"] small{
+    color: #F0E6D2 !important;
+}
+
+.sidebar-logo-wrap{
+    display: flex;
+    justify-content: center;
+    padding: 16px 0;
+    margin-top: 24px;
+    border-top: 1px solid rgba(200,170,110,0.3);
+}
+
+.sidebar-logo-wrap svg{
+    height: 150px;
+    width: auto;
+    opacity: 0.95;
+}
+
+[data-testid="stAppViewContainer"]{
+    background: #101B2D;
+}
+
+[data-testid="stAppViewContainer"] h1,
+[data-testid="stAppViewContainer"] h2,
+[data-testid="stAppViewContainer"] h3,
+[data-testid="stAppViewContainer"] h4,
+[data-testid="stAppViewContainer"] h5,
+[data-testid="stAppViewContainer"] p,
+[data-testid="stAppViewContainer"] label,
+[data-testid="stAppViewContainer"] span{
+    color: #F0E6D2;
+}
+
+[data-testid="stCaptionContainer"]{
+    color: #A8A296 !important;
+    opacity: 1 !important;
+}
+
+[data-testid="stTextInput"] input,
+[data-testid="stNumberInput"] input,
+[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+[data-testid="stMultiSelect"] div[data-baseweb="select"] > div{
+    background-color: #1E2328 !important;
+    color: #F0E6D2 !important;
+    border: 1px solid #785A28 !important;
+}
+
+div[data-baseweb="popover"] div[role="listbox"],
+div[data-baseweb="popover"] ul{
+    background-color: #1E2328 !important;
+}
+
+div[data-baseweb="popover"] li,
+div[data-baseweb="popover"] div[role="option"]{
+    color: #F0E6D2 !important;
+}
+
+[data-testid="stAppViewContainer"] button:not([kind="primary"]){
+    background-color: #1E2328 !important;
+    color: #F0E6D2 !important;
+    border: 1px solid #785A28 !important;
+}
+
+[data-testid="stAppViewContainer"] button:not([kind="primary"]):hover{
+    background-color: rgba(200,155,60,0.18) !important;
+    border-color: #C89B3C !important;
+}
+
+[data-testid="stHeader"], [data-testid="stToolbar"]{
+    background-color: #101B2D !important;
+}
+
+
+[data-testid="stAlert"]{
+    background-color: #1E2328 !important;
+    border: 1px solid #785A28 !important;
+    border-radius: 10px !important;
+}
+
+[data-testid="stAlert"] p, [data-testid="stAlert"] span{
+    color: #F0E6D2 !important;
+}
+
+[data-testid="stDataFrame"]{
+    border: 1px solid #785A28 !important;
+    border-radius: 10px !important;
+    overflow: hidden;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+}
+
+[data-testid="stTable"] table{
+    border: 1px solid #785A28 !important;
+    border-collapse: collapse;
+}
+
+[data-testid="stTable"] thead tr th{
+    background-color: #1E2328 !important;
+    color: #C8AA6E !important;
+}
+
+[data-testid="stTable"] tbody tr:nth-child(even){
+    background-color: rgba(200,170,110,0.06);
+}
+
+[data-testid="stTable"] td, [data-testid="stTable"] th{
+    border: 1px solid #785A28 !important;
 }

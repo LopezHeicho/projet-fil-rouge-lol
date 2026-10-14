@@ -1,0 +1,12 @@
+<svg class="sidebar-logo-svg" viewBox="0 0 160 185" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="hfGoldSide" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#F0E6D2"/>
+      <stop offset="100%" stop-color="#C89B3C"/>
+    </linearGradient>
+  </defs>
+  <polygon points="80,20 127.63,47.5 127.63,102.5 80,130 32.37,102.5 32.37,47.5" fill="#1E2328" stroke="url(#hfGoldSide)" stroke-width="3.5"/>
+  <polygon points="80,45 105.98,60 105.98,90 80,105 54.02,90 54.02,60" fill="none" stroke="#C8AA6E" stroke-width="1.8"/>
+  <polygon points="80,67 88,75 80,83 72,75" fill="url(#hfGoldSide)"/>
+  <text x="80" y="160" text-anchor="middle" font-family="'Cinzel', serif" font-weight="700" font-size="20" letter-spacing="4" fill="url(#hfGoldSide)">HEXFORGE</text>
+</svg>
