@@ -1,6 +1,5 @@
 .DS_Store
 __pycache__
-data/users.db
 .streamlit/secrets.toml
 cache/
-data/*
+data/users.db
